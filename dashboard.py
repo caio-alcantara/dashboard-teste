@@ -10,34 +10,28 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolu
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
-# Função para carregar o modelo de anomalias
 @st.cache_resource
 def load_anomaly_model():
     return joblib.load('iso_forest_tuning_model.pkl')
 
-# Função para escalar os dados de entrada
 @st.cache_data
 def scale_data(df):
     scaler = StandardScaler()
     df_scaled = scaler.fit_transform(df)
     return df_scaled
 
-# Função para fazer predições de anomalias
 def predict_anomalies(model, df_scaled):
     labels = model.predict(df_scaled)
     return pd.Series(labels).map({1: 0, -1: 1})
 
-# Interface da Dashboard com Abas
 
 st.image("galvao.png", width=350)
 
 st.markdown("<h1 style='text-align: left;'><span style='color: #c9a487;'>Método Galvão</span> para identificação de anomalias e previsão de consumo de gás</h1>", unsafe_allow_html=True)
 st.markdown("### Utilize as abas abaixo para conhecer os objetivos da dashboard, analisar anomalias ou fazer predições de consumo.")
 
-# Definindo abas
 tab1, tab2, tab3 = st.tabs(["Apresentação", "Detecção de Anomalias", "Previsão de Consumo"])
 
-# Adicionando estilo CSS para centralizar as abas
 st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] {
@@ -87,58 +81,48 @@ with tab2:
     # Carregar o modelo de anomalias
     iso_forest_model = load_anomaly_model()
 
-    # Upload de arquivo
     uploaded_file = st.file_uploader("Carregar arquivo CSV", type="csv", key="anomalias")
 
     if uploaded_file is not None:
-        # Ler o arquivo CSV
         df_new = pd.read_csv(uploaded_file)
 
-        # Remover colunas que não devem ser usadas no modelo
         df_filtered = df_new.drop(columns=['clientCode', 'clientIndex', 'clientCode_encoded', 'delta_time', 'consumo_horarizado'])
 
         st.write("Visualização dos primeiros 3 dados carregados:")
         st.dataframe(df_filtered.head(3))
 
-        # Selecionar automaticamente todas as colunas numéricas para análise
         selected_columns = df_filtered.select_dtypes(include=["number"]).columns
 
         if len(selected_columns) > 0:
-            # Escalando os dados selecionados
             df_selected = df_filtered[selected_columns]
             df_scaled = scale_data(df_selected)
 
-            # Fazendo as predições
             df_new['anomaly'] = predict_anomalies(iso_forest_model, df_scaled)
 
-            # Mostrando o resultado das predições
             num_anomalias = df_new[df_new['anomaly'] == 1].shape[0]
             num_normais = df_new[df_new['anomaly'] == 0].shape[0]
 
             st.markdown(f"<span style='color: red;'>**Número de anomalias detectadas:** {num_anomalias}</span>", unsafe_allow_html=True)
             st.markdown(f"<span style='color: green;'>**Número de amostras normais:** {num_normais}</span>", unsafe_allow_html=True)
 
-            # Tabela com Instalações com Dados Anômalos
             st.subheader("Instalações com Dados Anômalos")
 
-            # Filtrar apenas as linhas com anomalias
             df_anomalies = df_new[df_new['anomaly'] == 1][['clientCode', 'clientCode_encoded', 'clientIndex', 'delta_time', 'consumo_horarizado', 'anomaly']]
 
-            # Remover instalações duplicadas com anomalias
-            df_anomalies_unique = df_anomalies.drop_duplicates()
+            df_anomalies_unique = df_anomalies.drop_duplicates(subset=['clientCode', 'clientIndex'])
+            df_anomalies_unique = df_anomalies_unique.sort_values(by='delta_time', ascending=False)
 
-            st.write("Tabela de instalações que possuem dados anômalos:")
+            st.write("Tabela de instalações que possuem dados anômalos (Em primeiro, dados com tempo muito longo entre medições):")
             st.dataframe(df_anomalies_unique)
 
-            # Visualização com gráficos
             st.subheader("Visualização de Anomalias")
             st.write("Gráfico de contagem de amostras normais vs anomalias:")
 
-            # Plotando a contagem de anomalias
             st.bar_chart(df_new['anomaly'].value_counts())
 
-            # Gráfico Scatterplot de Anomalias vs Delta Time
             st.subheader("Scatterplot de Anomalias vs Delta Time")
+            st.write("O gráfico abaixo mostra a relação entre as anomalias detectadas e o tempo decorrido desde a última medição.")
+            st.write("As amostras normais estão em azul e as anomalias estão em vermelho. As principais anomalias são aquelas em que se passou muito tempo entre uma medição e outra.")
             fig, ax = plt.subplots(figsize=(10, 6))
             sns.scatterplot(
                 x='delta_time', y='consumo_horarizado', hue='anomaly', data=df_new, palette={0: 'blue', 1: 'red'}, alpha=0.7, ax=ax
@@ -150,7 +134,21 @@ with tab2:
             ax.legend(handles=handles, labels=['Normal', 'Anomalia'], title='Classificação')
             ax.grid(True)
             st.pyplot(fig)
+            
+            st.subheader("Distribuição de Consumo Diário (Normais vs Anômalias)")
+            fig_box, ax_box = plt.subplots(figsize=(10, 6))
+            sns.boxplot(x='anomaly', y='consumo_horarizado', data=df_new, palette='Set1', ax=ax_box)
+            ax_box.set_title("Boxplot de Consumo Diário - Normais vs Anômalias")
+            ax_box.set_xlabel("Classificação")
+            ax_box.set_ylabel("Consumo Horarizado (m³)")
+            st.pyplot(fig_box)
 
+            st.subheader("Mapa de Correlação das Variáveis")
+            fig_corr, ax_corr = plt.subplots(figsize=(10, 6))
+            corr_matrix = df_new[selected_columns].corr()
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', ax=ax_corr)
+            ax_corr.set_title("Mapa de Correlação das Variáveis")
+            st.pyplot(fig_corr)
             
         else:
             st.warning("Não foram encontradas colunas numéricas no arquivo carregado.")
@@ -181,18 +179,15 @@ with tab3:
         #df_50_instalacoes = pd.read_csv(uploaded_file)
         df_50_instalacoes = pd.read_csv('df_50_instalacoes.csv')
         
-        # Encodificação do clientCode
         label_encoder = LabelEncoder()
         df_50_instalacoes['clientCode_encoded'] = label_encoder.fit_transform(df_50_instalacoes['clientCode'])
         
-        # Reordenar as colunas para que 'clientCode_encoded' seja a primeira
         cols = ['clientCode_encoded'] + [col for col in df_50_instalacoes.columns if col != 'clientCode_encoded']
         df_50_instalacoes = df_50_instalacoes[cols]
         
         st.write("Visualização dos primeiros 3 dados carregados:")
         st.dataframe(df_50_instalacoes.head(3))
         
-        ## Selecionar um clientCode
         client_code = st.selectbox("Selecione o clientCode:", df_50_instalacoes['clientCode_encoded'].unique())
 
         ## Identificar os clientIndices associados ao client
@@ -203,10 +198,8 @@ with tab3:
         
         instalacao_df = df_50_instalacoes[(df_50_instalacoes['clientCode_encoded'] == client_code) & (df_50_instalacoes['clientIndex'] == client_index)].copy()
         
-        # Agrupar os dados por instalação e por mês, somando o consumo diário
         instalacao_mensal_df = instalacao_df.groupby('ano_mes')['consumo_dia'].sum().reset_index()
 
-        # Garantir que o índice seja o ano e mês
         instalacao_mensal_df.set_index('ano_mes', inplace=True)
 
         fig_consumo_real = px.line(
@@ -244,12 +237,10 @@ with tab3:
         # Gráfico de Barras da Média de Consumo Mensal por Estação do Ano
         media_consumo_estacao = instalacao_df.groupby('estacao')['consumo_dia'].mean().reset_index()
 
-        # Ordenar as estações por consumo médio em ordem crescente
         media_consumo_estacao = media_consumo_estacao.sort_values(by='consumo_dia')
-
-        # Identificar a estação com maior consumo
         max_consumo_estacao = media_consumo_estacao.loc[media_consumo_estacao['consumo_dia'].idxmax()]
 
+        # Gráfico de Barras da Média de Consumo Diário por Estação do Ano
         fig_media_estacao = px.bar(
             media_consumo_estacao,
             x='estacao',

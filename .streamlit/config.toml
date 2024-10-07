@@ -2,5 +2,5 @@
 base="light"
 
 [server]
-maxUploadSize = 800
+maxUploadSize = 2000
 fileWatcherType = "watchdog"
