@@ -29,7 +29,7 @@ def predict_anomalies(model, df_scaled):
 
 # Interface da Dashboard com Abas
 
-st.image("galvao.png", width=250)
+st.image("galvao.png", width=350)
 
 st.markdown("<h1 style='text-align: left;'><span style='color: #c9a487;'>Método Galvão</span> para identificação de anomalias e previsão de consumo de gás</h1>", unsafe_allow_html=True)
 st.markdown("### Utilize as abas abaixo para conhecer os objetivos da dashboard, analisar anomalias ou fazer predições de consumo.")
